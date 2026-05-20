@@ -28,39 +28,22 @@ pip install lucid-logger
 ## Quick Start
 
 ```python
-from lucid_logger import LucidLogger, LucidLoadingBar
+from lucid_logger import get_logger
 
-logger = LucidLogger(name="app", log_lowest_level=10, colored_logs=True)
-logger.basic_config()
-
+logger = get_logger("app")
 logger.info("Server started")
 logger.warning("High memory usage")
 logger.error("Failed to connect")
 ```
 
-### With a Progress Bar (manual)
-
-```python
-from lucid_logger import LucidLogger, LucidLoadingBar
-
-logger = LucidLogger(name="app", log_lowest_level=10, colored_logs=True)
-logger.basic_config()
-
-items = list(range(50))
-bar = LucidLoadingBar(name="import")
-bar.init_bar(iterable=items, prefix="Importing")
-logger.add_loading_bar(bar)
-
-for item in items:
-    bar.progress_bar()
-    logger.info(f"Processing item {item}")
-
-bar.finish_loading()
-```
+`get_logger` creates a `LucidLogger` with a colored stream handler and a timed rotating file handler in one call.
 
 ### With a Progress Bar (wrap)
 
 ```python
+from lucid_logger import get_logger, LucidLoadingBar
+
+logger = get_logger("app")
 bar = LucidLoadingBar(name="import")
 logger.add_loading_bar(bar)
 
@@ -72,11 +55,9 @@ for item in bar.wrap(items, prefix="Importing"):
 ### With a Spinner
 
 ```python
-from lucid_logger import LucidLogger, LucidSpinner
+from lucid_logger import get_logger, LucidSpinner
 
-logger = LucidLogger(name="app", log_lowest_level=10, colored_logs=True)
-logger.basic_config()
-
+logger = get_logger("app")
 spinner = LucidSpinner(name="fetch", prefix="Fetching data")
 logger.add_spinner(spinner)
 
@@ -86,17 +67,33 @@ with spinner:
 logger.info("Fetch complete")
 ```
 
-Or without a context manager:
+### Manual setup (advanced)
 
 ```python
-spinner.start()
-result = requests.get(url)
-spinner.stop()
+from lucid_logger import LucidLogger
+
+logger = LucidLogger(name="app", log_lowest_level=10, colored_logs=True)
+logger.basic_config()
 ```
 
 ---
 
 ## API Reference
+
+### `get_logger(name, ...)`
+
+Factory function — the recommended way to create a logger.
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `name` | `str` | — | Logger name |
+| `level` | `int` | `logging.DEBUG` | Minimum log level |
+| `colored` | `bool` | `True` | Enable ANSI color on stream output |
+| `log_dir` | `str` | `'./logs/'` | Directory for rotating log files |
+| `stream` | `bool` | `True` | Attach a stream handler to stdout |
+| `file` | `bool` | `True` | Attach a rotating file handler |
+
+---
 
 ### `LucidLogger`
 
@@ -212,6 +209,9 @@ Built-in named colors available for custom levels and bar/spinner segments:
 ## Custom Log Levels
 
 ```python
+from lucid_logger import get_logger, cyan
+
+logger = get_logger("app")
 logger.add_logging_level("TRACE", 5, cyan)
 logger.trace("Entering request handler")
 ```
