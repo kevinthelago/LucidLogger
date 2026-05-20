@@ -5,6 +5,8 @@ import logging
 import subprocess
 from datetime import datetime
 
+__version__ = "0.0.6"
+
 isATty = sys.stdout.isatty()
 time_format = "$TIME_COLOR[%(asctime)s]$RESET[$LEVEL_COLOR%(levelname)s$RESET]$FILE$LINE $MESSAGE_COLOR%(message)s$RESET"
 
@@ -269,4 +271,50 @@ class LucidTimedRotatingFileHandler(TimedRotatingFileHandler):
     def generateFileName(self):
         date_format = "%Y-%m-%d"
         return datetime.now().strftime(date_format)
+
+
+def get_logger(name, level=logging.DEBUG, colored=True, log_dir='./logs/', stream=True, file=True):
+    """Return a fully configured LucidLogger.
+
+    Args:
+        name: Logger name.
+        level: Minimum log level. Defaults to logging.DEBUG.
+        colored: Enable ANSI color output on the stream handler.
+        log_dir: Directory for rotating log files.
+        stream: Attach a LucidStreamHandler to stdout.
+        file: Attach a LucidTimedRotatingFileHandler writing to log_dir.
+    """
+    logger = LucidLogger(name=name, log_lowest_level=level, colored_logs=colored)
+    logger.setLevel(level)
+
+    stream_handler = None
+    rotating_handler = None
+
+    if stream:
+        stream_handler = LucidStreamHandler()
+        stream_handler.setFormatter(LucidStreamFormatter(colored_logs=colored))
+
+    if file:
+        rotating_handler = LucidTimedRotatingFileHandler(directory=log_dir)
+        rotating_handler.setFormatter(LucidFileFormatter())
+
+    logger.stream_handler = stream_handler
+    logger.rotating_file_handler = rotating_handler
+    logger.handlers = [h for h in (rotating_handler, stream_handler) if h is not None]
+
+    return logger
+
+
+__all__ = [
+    "__version__",
+    "get_logger",
+    "LucidLogger",
+    "LucidLoadingBar",
+    "LucidStreamFormatter",
+    "LucidStreamHandler",
+    "LucidFileFormatter",
+    "LucidTimedRotatingFileHandler",
+    "COLORS",
+    "grey", "white", "red", "yellow", "green", "lime", "cyan", "blue", "purple",
+]
 
