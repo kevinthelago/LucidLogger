@@ -37,7 +37,7 @@ logger.warning("High memory usage")
 logger.error("Failed to connect")
 ```
 
-### With a Progress Bar
+### With a Progress Bar (manual)
 
 ```python
 from lucid_logger import LucidLogger, LucidLoadingBar
@@ -58,6 +58,19 @@ for item in items:
 bar.finish_loading()
 logger.info("Import complete")
 ```
+
+### With a Progress Bar (wrap)
+
+```python
+bar = LucidLoadingBar(name="import")
+logger.add_loading_bar(bar)
+
+for item in bar.wrap(items, prefix="Importing"):
+    process(item)
+    logger.info(f"Processed {item}")
+```
+
+`wrap` calls `init_bar`, yields each item, advances the bar after each yield, and calls `finish_loading` when the iterable is exhausted (including on exception).
 
 ---
 
@@ -104,6 +117,7 @@ A terminal progress bar that renders inline with log output.
 | Method | Description |
 |---|---|
 | `init_bar(iterable, prefix, total)` | Start the bar, auto-sizes to terminal width |
+| `wrap(iterable, prefix)` | Iterate over `iterable` while auto-advancing the bar |
 | `progress_bar()` | Advance progress by one step |
 | `finish_loading()` | Mark the bar complete and clear it |
 | `get_bar()` | Return the current formatted bar string |
