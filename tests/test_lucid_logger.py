@@ -162,9 +162,6 @@ class TestLucidStreamFormatter:
             lineno=42, msg="test message", args=(), exc_info=None,
         )
 
-    @pytest.mark.xfail(
-        reason="$RESET is always substituted with grey regardless of colored_logs; fixed by issue #7"
-    )
     def test_no_ansi_when_colored_false(self):
         formatter = LucidStreamFormatter(colored_logs=False)
         record = self._make_record(logging.INFO)
@@ -238,9 +235,6 @@ class TestLucidTimedRotatingFileHandler:
         name = handler.generateFileName()
         assert re.match(r"\d{4}-\d{2}-\d{2}", name), f"Unexpected filename: {name}"
 
-    @pytest.mark.xfail(
-        reason="LucidTimedRotatingFileHandler does not create missing directories; fixed by issue #7"
-    )
     def test_creates_log_directory(self, tmp_path):
         log_dir = str(tmp_path / "new_logs") + os.sep
         handler = LucidTimedRotatingFileHandler(directory=log_dir)
