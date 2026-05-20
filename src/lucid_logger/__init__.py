@@ -172,6 +172,20 @@ class LucidLoadingBar:
     def progress_bar(self):
         self.progress += 1
 
+    def wrap(self, iterable, prefix="Loading..."):
+        """Iterate over iterable while auto-advancing the bar.
+
+        Calls init_bar, yields each item (advancing progress after each),
+        then calls finish_loading when the iterable is exhausted or raises.
+        """
+        self.init_bar(iterable=iterable, prefix=prefix)
+        try:
+            for item in iterable:
+                yield item
+                self.progress_bar()
+        finally:
+            self.finish_loading()
+
 
 class LucidStreamFormatter(logging.Formatter):
     def __init__(
