@@ -1,3 +1,32 @@
 [build-system]
 requires = ["setuptools>=42"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "lucid-logger"
+version = "0.0.6"
+description = "Python logging library with color output, progress bars, and spinners"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.6"
+authors = [
+    { name = "Kevin Lago", email = "kevinthelago@gmail.com" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/Kevin-Lago/LucidLogger"
+"Bug Tracker" = "https://github.com/Kevin-Lago/LucidLogger/issues"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
