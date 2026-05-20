@@ -1,8 +1,10 @@
-from logging.handlers import TimedRotatingFileHandler
+﻿from logging.handlers import TimedRotatingFileHandler
 from os import environ
 import os
 import shutil
+import sys
 import logging
+import threading
 from datetime import datetime
 
 RESET = "\033[0m"
@@ -47,6 +49,9 @@ class LucidLogger(logging.Logger):
 
     def get_loading_bar(self, name):
         return self.stream_handler.loading_bars[name]
+
+    def add_spinner(self, spinner):
+        self.stream_handler.add_spinner(spinner)
 
     def add_logging_level(self, level_name, level_num, color, method_name=None):
         if not method_name:
@@ -94,7 +99,7 @@ class LucidLoadingBar:
             bar_color=grey,
             percent_color=grey,
             bar_format="$RESET$PREFIX_COLOR$PREFIX$RESET |$BAR_COLOR$BAR$RESET| $PERCENT_COLOR$PERCENT$RESET",
-            fill='\xdb' if environ.get('SHELL') else '\u2588',
+            fill='\xdb' if environ.get('SHELL') else '█',
             decimals=1, length=100, print_end='\r', is_loading=None, total=0
     ):
         self.name = name
@@ -119,7 +124,6 @@ class LucidLoadingBar:
         percent = ("{0:." + str(self.decimals) + "f}").format(100 * (self.progress / float(self.total)))
         filled_length = int(self.length * self.progress // self.total)
         bar = self.fill * filled_length + "-" * (self.length - filled_length)
-
         return self.format_bar(bar=bar, percent=percent)
 
     def get_clear_bar(self):
@@ -134,7 +138,6 @@ class LucidLoadingBar:
             .replace('$BAR', bar) \
             .replace('$PERCENT_COLOR', self.percent_color if self.percent_color and self.colored_logs else '') \
             .replace('$PERCENT', percent)
-
         return formatted_bar
 
     def init_bar(self, iterable=None, prefix="Loading...", total=None):
@@ -169,6 +172,74 @@ class LucidLoadingBar:
             self.finish_loading()
 
 
+class LucidSpinner:
+    """Indeterminate progress indicator that animates in place on a background thread."""
+
+    BRAILLE_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+    ASCII_FRAMES = ['|', '/', '-', '\\']
+
+    def __init__(self, name, prefix='', colored_logs=True, color=None, interval=0.1):
+        self.name = name
+        self.prefix = prefix
+        self.colored_logs = colored_logs
+        self.color = color if color is not None else grey
+        self.interval = interval
+        self.is_spinning = False
+        self._frame_index = 0
+        self._thread = None
+        self._stop_event = threading.Event()
+        self._write_lock = None
+        self._stream = None
+
+        try:
+            '⠋'.encode(sys.stdout.encoding or 'utf-8')
+            self.frames = self.BRAILLE_FRAMES
+        except (UnicodeEncodeError, LookupError):
+            self.frames = self.ASCII_FRAMES
+
+    def get_frame(self):
+        frame = self.frames[self._frame_index % len(self.frames)]
+        color = self.color if self.colored_logs else ''
+        reset = RESET if self.colored_logs else ''
+        return f"{color}{self.prefix} {frame}{reset}"
+
+    def get_clear_frame(self):
+        return ' ' * (len(self.prefix) + 2)
+
+    def _animate(self):
+        while not self._stop_event.is_set():
+            if self._stream is not None and self._write_lock is not None:
+                with self._write_lock:
+                    self._stream.write('\r' + self.get_frame())
+                    self._stream.flush()
+            self._frame_index += 1
+            self._stop_event.wait(self.interval)
+        if self._stream is not None and self._write_lock is not None:
+            with self._write_lock:
+                self._stream.write('\r' + self.get_clear_frame() + '\r')
+                self._stream.flush()
+
+    def start(self):
+        self.is_spinning = True
+        self._stop_event.clear()
+        self._thread = threading.Thread(target=self._animate, daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self):
+        self.is_spinning = False
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, *_args):
+        self.stop()
+
+
 class LucidStreamFormatter(logging.Formatter):
     def __init__(
             self, datefmt="%m/%d/%Y %H:%M:%S", colored_logs=True, detailed_view_threshold=20,
@@ -186,8 +257,7 @@ class LucidStreamFormatter(logging.Formatter):
             logging.ERROR: red,
             logging.WARNING: yellow,
             logging.INFO: cyan,
-            # 15: cyan,
-            logging.DEBUG: green
+            logging.DEBUG: green,
         }
 
     def get_level_color(self, level_no):
@@ -196,7 +266,8 @@ class LucidStreamFormatter(logging.Formatter):
         return ''
 
     def get_formatted_string(self, level_no):
-        formatted_string = self.log_format.replace("$RESET", RESET)\
+        reset = RESET if self.colored_logs else ''
+        formatted_string = self.log_format.replace("$RESET", reset)\
             .replace("$FILE", "" if level_no <= self.detailed_view_threshold else "[%(filename)s:")\
             .replace("$LINE", "" if level_no <= self.detailed_view_threshold else "%(lineno)d]")\
 
@@ -225,19 +296,31 @@ class LucidStreamHandler(logging.StreamHandler):
         logging.StreamHandler.__init__(self)
         self.return_carriage = '\r'
         self.loading_bars = {}
+        self.spinners = {}
+        self._write_lock = threading.Lock()
 
     def get_stream_formatter(self):
         return self.formatter
 
+    def add_spinner(self, spinner):
+        spinner._write_lock = self._write_lock
+        spinner._stream = self.stream
+        self.spinners[spinner.name] = spinner
+
     def emit(self, record):
-        for loading_bar in self.loading_bars:
-            if self.loading_bars[loading_bar].is_loading:
-                self.stream.write(self.return_carriage + self.loading_bars[loading_bar].get_clear_bar() + self.return_carriage)
-        message = self.format(record)
-        self.stream.write(self.return_carriage + message + self.terminator)
-        for loading_bar in self.loading_bars:
-            if self.loading_bars[loading_bar]:
-                self.stream.write(self.return_carriage + self.loading_bars[loading_bar].get_bar() + self.return_carriage)
+        with self._write_lock:
+            for bar in self.loading_bars.values():
+                if bar.is_loading:
+                    self.stream.write(self.return_carriage + bar.get_clear_bar() + self.return_carriage)
+            for spinner in self.spinners.values():
+                if spinner.is_spinning:
+                    self.stream.write(self.return_carriage + spinner.get_clear_frame() + self.return_carriage)
+            message = self.format(record)
+            self.stream.write(self.return_carriage + message + self.terminator)
+            for bar in self.loading_bars.values():
+                if bar.is_loading:
+                    self.stream.write(self.return_carriage + bar.get_bar() + self.return_carriage)
+            self.stream.flush()
 
 
 class LucidFileFormatter(logging.Formatter):
@@ -266,4 +349,3 @@ class LucidTimedRotatingFileHandler(TimedRotatingFileHandler):
     def generateFileName(self):
         date_format = "%Y-%m-%d"
         return datetime.now().strftime(date_format)
-

@@ -1,6 +1,6 @@
 # LucidLogger
 
-A Python library for standardized terminal logging with ANSI color support, progress bars, and timed rotating file output.
+A Python library for standardized terminal logging with ANSI color support, progress bars, spinners, and timed rotating file output.
 
 ---
 
@@ -9,6 +9,7 @@ A Python library for standardized terminal logging with ANSI color support, prog
 - Colored log output per level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 - Custom log levels with configurable colors
 - Inline progress/loading bars that coexist with log output
+- Indeterminate spinner for operations with unknown duration
 - Auto-resizing progress bars based on terminal width
 - Cross-platform (Windows CMD, PowerShell, Bash)
 - Timed rotating file handler with dated filenames
@@ -51,12 +52,10 @@ bar.init_bar(iterable=items, prefix="Importing")
 logger.add_loading_bar(bar)
 
 for item in items:
-    # do work...
     bar.progress_bar()
     logger.info(f"Processing item {item}")
 
 bar.finish_loading()
-logger.info("Import complete")
 ```
 
 ### With a Progress Bar (wrap)
@@ -70,7 +69,30 @@ for item in bar.wrap(items, prefix="Importing"):
     logger.info(f"Processed {item}")
 ```
 
-`wrap` calls `init_bar`, yields each item, advances the bar after each yield, and calls `finish_loading` when the iterable is exhausted (including on exception).
+### With a Spinner
+
+```python
+from lucid_logger import LucidLogger, LucidSpinner
+
+logger = LucidLogger(name="app", log_lowest_level=10, colored_logs=True)
+logger.basic_config()
+
+spinner = LucidSpinner(name="fetch", prefix="Fetching data")
+logger.add_spinner(spinner)
+
+with spinner:
+    result = requests.get(url)
+
+logger.info("Fetch complete")
+```
+
+Or without a context manager:
+
+```python
+spinner.start()
+result = requests.get(url)
+spinner.stop()
+```
 
 ---
 
@@ -93,6 +115,7 @@ Extends `logging.Logger`.
 | `basic_config()` | Attach default stream and file handlers |
 | `add_loading_bar(bar)` | Register a `LucidLoadingBar` with the stream handler |
 | `get_loading_bar(name)` | Retrieve a registered bar by name |
+| `add_spinner(spinner)` | Register a `LucidSpinner` with the stream handler |
 | `add_logging_level(level_name, level_num, color)` | Register a custom log level with a color |
 
 ---
@@ -124,6 +147,30 @@ A terminal progress bar that renders inline with log output.
 
 ---
 
+### `LucidSpinner`
+
+An indeterminate progress indicator that animates in place on a background thread. Log output from `LucidLogger` will pause the spinner frame, write the log line, then let the spinner resume — no interleaving.
+
+Uses Unicode braille frames (`⠋ ⠙ ⠹ …`) where supported, falls back to ASCII (`| / - \`).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `name` | `str` | — | Unique identifier |
+| `prefix` | `str` | `''` | Label shown before the spinner frame |
+| `colored_logs` | `bool` | `True` | Enable ANSI color |
+| `color` | `str` | `grey` | ANSI escape string for the spinner color |
+| `interval` | `float` | `0.1` | Seconds between frame advances |
+
+**Methods:**
+
+| Method | Description |
+|---|---|
+| `start()` | Begin animation on a daemon thread |
+| `stop()` | Stop animation, clear the line, join the thread |
+| `__enter__` / `__exit__` | Use as a context manager |
+
+---
+
 ### `LucidStreamFormatter`
 
 Custom `logging.Formatter` that injects ANSI color codes per log level.
@@ -134,7 +181,7 @@ Levels below `detailed_view_threshold` omit the filename/line number from the ou
 
 ### `LucidTimedRotatingFileHandler`
 
-Extends `TimedRotatingFileHandler`. Rotates at midnight and names files by date (`YYYY-MM-DD.log`).
+Extends `TimedRotatingFileHandler`. Rotates at midnight and names files by date (`YYYY-MM-DD.log`). Creates the log directory automatically if it does not exist.
 
 | Parameter | Default | Description |
 |---|---|---|
@@ -146,7 +193,7 @@ Extends `TimedRotatingFileHandler`. Rotates at midnight and names files by date 
 
 ## Color Reference
 
-Built-in named colors available for custom levels and bar segments:
+Built-in named colors available for custom levels and bar/spinner segments:
 
 | Name | Hex |
 |---|---|
