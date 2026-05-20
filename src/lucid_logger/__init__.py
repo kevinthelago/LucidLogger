@@ -1,49 +1,35 @@
-from logging.handlers import TimedRotatingFileHandler
+﻿from logging.handlers import TimedRotatingFileHandler
 from os import environ
+import os
+import shutil
 import sys
 import logging
-import subprocess
 import threading
 from datetime import datetime
 
 RESET = "\033[0m"
 
-isATty = sys.stdout.isatty()
-time_format = "$TIME_COLOR[%(asctime)s]$RESET[$LEVEL_COLOR%(levelname)s$RESET]$FILE$LINE $MESSAGE_COLOR%(message)s$RESET"
-
-
-# def get_color_escape_string(color_name):
-
-
-grey = "\033[38;2;200;200;200m" if not isATty else '\033[48m'
-white = "\033[38;2;255;255;255m" if not isATty else '\033[48m'
-red = "\033[38;2;255;0;0m" if not isATty else '\033[48m'
-yellow = "\033[38;2;255;255;0m" if not isATty else '\033[48m'
-green = "\033[38;2;0;150;0m" if not isATty else '\033[48m'
-lime = "\033[38;2;0;255;0m" if not isATty else '\033[48m'
-cyan = "\033[38;2;0;255;255m" if not isATty else '\033[48m'
-blue = "\033[38;2;0;0;255m" if not isATty else '\033[48m'
-purple = "\033[38;2;0;0;150m" if not isATty else '\033[48m'
+grey = "\033[38;2;200;200;200m"
+white = "\033[38;2;255;255;255m"
+red = "\033[38;2;255;0;0m"
+yellow = "\033[38;2;255;255;0m"
+green = "\033[38;2;0;150;0m"
+lime = "\033[38;2;0;255;0m"
+cyan = "\033[38;2;0;255;255m"
+blue = "\033[38;2;0;0;255m"
+purple = "\033[38;2;0;0;150m"
 
 COLORS = {
-    "grey": "\033[38;2;200;200;200m",
-    "white": "\033[38;2;255;255;255m",
-    "red": "\033[38;2;255;0;0m",
-    "yellow": "\033[38;2;255;255;0m",
-    "green": "\033[38;2;0;150;0m",
-    "lime": "\033[38;2;0;255;0m",
-    "cyan": "\033[38;2;0;255;255m",
-    "blue": "\033[38;2;0;0;255m",
-    "purple": "\033[38;2;0;0;150m"
+    "grey": grey,
+    "white": white,
+    "red": red,
+    "yellow": yellow,
+    "green": green,
+    "lime": lime,
+    "cyan": cyan,
+    "blue": blue,
+    "purple": purple,
 }
-
-class Formats:
-    #  "$TIME_COLOR[%(asctime)s]$RESET[$LEVEL_COLOR%(levelname)s$RESET]$FILE$LINE $MESSAGE_COLOR%(message)s$RESET"
-    def __init__(self):
-        self.isATty = sys.stdout.isatty()
-
-        self.time_string_format = "[$TIME_COLOR%(asctime)s$RESET]"
-        self.level_string_format = "[$LEVEL_COLOR%(levelname)s$RESET]"
 
 
 class LucidLogger(logging.Logger):
@@ -113,7 +99,7 @@ class LucidLoadingBar:
             bar_color=grey,
             percent_color=grey,
             bar_format="$RESET$PREFIX_COLOR$PREFIX$RESET |$BAR_COLOR$BAR$RESET| $PERCENT_COLOR$PERCENT$RESET",
-            fill='\xdb' if environ.get('SHELL') else '\u2588',
+            fill='\xdb' if environ.get('SHELL') else '█',
             decimals=1, length=100, print_end='\r', is_loading=None, total=0
     ):
         self.name = name
@@ -138,7 +124,6 @@ class LucidLoadingBar:
         percent = ("{0:." + str(self.decimals) + "f}").format(100 * (self.progress / float(self.total)))
         filled_length = int(self.length * self.progress // self.total)
         bar = self.fill * filled_length + "-" * (self.length - filled_length)
-
         return self.format_bar(bar=bar, percent=percent)
 
     def get_clear_bar(self):
@@ -146,23 +131,17 @@ class LucidLoadingBar:
 
     def format_bar(self, bar, percent):
         formatted_bar = self.bar_format\
-            .replace('$RESET', grey) \
+            .replace('$RESET', RESET) \
             .replace('$PREFIX_COLOR', self.prefix_color if self.prefix_color and self.colored_logs else '') \
             .replace('$PREFIX', self.prefix) \
             .replace('$BAR_COLOR', self.bar_color if self.bar_color and self.colored_logs else '') \
             .replace('$BAR', bar) \
             .replace('$PERCENT_COLOR', self.percent_color if self.percent_color and self.colored_logs else '') \
             .replace('$PERCENT', percent)
-
         return formatted_bar
 
     def init_bar(self, iterable=None, prefix="Loading...", total=None):
-        try:
-            tput = subprocess.Popen(['tput', 'cols'], stdout=subprocess.PIPE)
-            terminal_length = int(tput.communicate()[0].strip())
-        except FileNotFoundError:
-            terminal_length = 100
-
+        terminal_length = shutil.get_terminal_size(fallback=(100, 24)).columns
         self.is_loading = True
         self.total = len(iterable) if iterable else total
         self.length = (terminal_length - len(self.prefix) - 10)
@@ -177,6 +156,20 @@ class LucidLoadingBar:
 
     def progress_bar(self):
         self.progress += 1
+
+    def wrap(self, iterable, prefix="Loading..."):
+        """Iterate over iterable while auto-advancing the bar.
+
+        Calls init_bar, yields each item (advancing progress after each),
+        then calls finish_loading when the iterable is exhausted or raises.
+        """
+        self.init_bar(iterable=iterable, prefix=prefix)
+        try:
+            for item in iterable:
+                yield item
+                self.progress_bar()
+        finally:
+            self.finish_loading()
 
 
 class LucidSpinner:
@@ -195,8 +188,8 @@ class LucidSpinner:
         self._frame_index = 0
         self._thread = None
         self._stop_event = threading.Event()
-        self._write_lock = None  # injected by LucidStreamHandler
-        self._stream = None      # injected by LucidStreamHandler
+        self._write_lock = None
+        self._stream = None
 
         try:
             '⠋'.encode(sys.stdout.encoding or 'utf-8')
@@ -255,7 +248,7 @@ class LucidStreamFormatter(logging.Formatter):
         self.time_color = grey
         self.message_color = grey
         self.datefmt = datefmt
-        self.colored_logs = colored_logs if not isATty else False
+        self.colored_logs = colored_logs
         self.detailed_view_threshold = detailed_view_threshold
         self.log_format = log_format
 
@@ -264,8 +257,7 @@ class LucidStreamFormatter(logging.Formatter):
             logging.ERROR: red,
             logging.WARNING: yellow,
             logging.INFO: cyan,
-            # 15: cyan,
-            logging.DEBUG: green
+            logging.DEBUG: green,
         }
 
     def get_level_color(self, level_no):
@@ -274,7 +266,8 @@ class LucidStreamFormatter(logging.Formatter):
         return ''
 
     def get_formatted_string(self, level_no):
-        formatted_string = self.log_format.replace("$RESET", grey)\
+        reset = RESET if self.colored_logs else ''
+        formatted_string = self.log_format.replace("$RESET", reset)\
             .replace("$FILE", "" if level_no <= self.detailed_view_threshold else "[%(filename)s:")\
             .replace("$LINE", "" if level_no <= self.detailed_view_threshold else "%(lineno)d]")\
 
@@ -343,6 +336,7 @@ class LucidTimedRotatingFileHandler(TimedRotatingFileHandler):
         self.when = when
         self.interval = interval
         self.file_extension = file_extension
+        os.makedirs(directory, exist_ok=True)
         filename = f"{self.directory}{self.generateFileName()}.{self.file_extension}"
         TimedRotatingFileHandler.__init__(self, filename=filename, when=when, interval=interval)
 
@@ -355,4 +349,3 @@ class LucidTimedRotatingFileHandler(TimedRotatingFileHandler):
     def generateFileName(self):
         date_format = "%Y-%m-%d"
         return datetime.now().strftime(date_format)
-
