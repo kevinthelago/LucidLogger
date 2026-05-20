@@ -10,7 +10,7 @@ import logging
 import threading
 from datetime import datetime
 
-__version__ = "0.0.6"
+__version__ = "0.1.0"
 
 RESET = "\033[0m"
 

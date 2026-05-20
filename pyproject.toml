@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lucid-logger"
-version = "0.0.6"
+version = "0.1.0"
 description = "Python logging library with color output, progress bars, and spinners"
 readme = "README.md"
 license = { text = "MIT" }
